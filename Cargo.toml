@@ -1,0 +1,18 @@
+[package]
+name = "codex-gateway-core"
+description = "Shared gateway state manager for Codex app-server based gateways"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/arm64be/codex-gateway-core"
+rust-version = "1.85"
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+codex-app-server = { git = "https://github.com/arm64be/codex-rs", tag = "codex-0.136.0" }
+codex-app-server-protocol = { git = "https://github.com/arm64be/codex-rs", tag = "codex-0.136.0" }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
+tracing = "0.1"
