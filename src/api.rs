@@ -49,6 +49,7 @@ pub enum ReasoningEffort {
     Low,
     Medium,
     High,
+    XHigh,
 }
 
 impl fmt::Display for ReasoningEffort {
@@ -58,6 +59,7 @@ impl fmt::Display for ReasoningEffort {
             Self::Low => f.write_str("low"),
             Self::Medium => f.write_str("medium"),
             Self::High => f.write_str("high"),
+            Self::XHigh => f.write_str("xhigh"),
         }
     }
 }
@@ -83,6 +85,7 @@ impl From<ReasoningEffort> for codex_app_server_protocol::ReasoningEffort {
             ReasoningEffort::Low => Self::Low,
             ReasoningEffort::Medium => Self::Medium,
             ReasoningEffort::High => Self::High,
+            ReasoningEffort::XHigh => Self::Xhigh,
         }
     }
 }
