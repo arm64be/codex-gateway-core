@@ -32,7 +32,19 @@ impl GatewayConfig {
 }
 
 pub trait TurnOutput<K: Sync>: Send + Sync + 'static {
+    fn turn_started<'a>(&'a self, _key: &'a K) -> BoxFuture<'a, anyhow::Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn assistant_message_started<'a>(&'a self, _key: &'a K) -> BoxFuture<'a, anyhow::Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn send<'a>(&'a self, key: &'a K, text: &'a str) -> BoxFuture<'a, anyhow::Result<()>>;
+
+    fn assistant_message_finished<'a>(&'a self, _key: &'a K) -> BoxFuture<'a, anyhow::Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
 
     fn send_error<'a>(&'a self, key: &'a K, error: &'a anyhow::Error) -> BoxFuture<'a, ()> {
         Box::pin(async move {

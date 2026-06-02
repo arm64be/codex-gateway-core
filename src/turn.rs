@@ -78,6 +78,13 @@ where
         }
     }
 
+    if let Err(err) = output.turn_started(&key).await {
+        clear_active_turn(sessions, &key).await;
+        return Err(err);
+    }
+
+    let mut started_agent_items = HashSet::new();
+    let mut finished_agent_items = HashSet::new();
     let mut sent_agent_items = HashSet::new();
     loop {
         let incoming = server.recv().await?;
@@ -86,6 +93,17 @@ where
         };
 
         match *notification {
+            ServerNotification::ItemStarted(item)
+                if item.thread_id == thread_id && item.turn_id == turn_id =>
+            {
+                if let Some((id, _)) = agent_item_text(&item.item)
+                    && started_agent_items.insert(id.to_string())
+                    && let Err(err) = output.assistant_message_started(&key).await
+                {
+                    clear_active_turn(sessions, &key).await;
+                    return Err(err);
+                }
+            }
             ServerNotification::ItemCompleted(item)
                 if item.thread_id == thread_id && item.turn_id == turn_id =>
             {
@@ -93,7 +111,26 @@ where
                     && !text.trim().is_empty()
                     && sent_agent_items.insert(id.to_string())
                 {
-                    output.send(&key, text).await?;
+                    if let Err(err) = send_agent_message(
+                        output.as_ref(),
+                        &key,
+                        id,
+                        text,
+                        &mut started_agent_items,
+                        &mut finished_agent_items,
+                    )
+                    .await
+                    {
+                        clear_active_turn(sessions, &key).await;
+                        return Err(err);
+                    }
+                } else if let Some((id, _)) = agent_item_text(&item.item)
+                    && started_agent_items.contains(id)
+                    && finished_agent_items.insert(id.to_string())
+                    && let Err(err) = output.assistant_message_finished(&key).await
+                {
+                    clear_active_turn(sessions, &key).await;
+                    return Err(err);
                 }
             }
             ServerNotification::TurnCompleted(note)
@@ -104,7 +141,26 @@ where
                         && !text.trim().is_empty()
                         && sent_agent_items.insert(id.to_string())
                     {
-                        output.send(&key, text).await?;
+                        if let Err(err) = send_agent_message(
+                            output.as_ref(),
+                            &key,
+                            id,
+                            text,
+                            &mut started_agent_items,
+                            &mut finished_agent_items,
+                        )
+                        .await
+                        {
+                            clear_active_turn(sessions, &key).await;
+                            return Err(err);
+                        }
+                    } else if let Some((id, _)) = agent_item_text(item)
+                        && started_agent_items.contains(id)
+                        && finished_agent_items.insert(id.to_string())
+                        && let Err(err) = output.assistant_message_finished(&key).await
+                    {
+                        clear_active_turn(sessions, &key).await;
+                        return Err(err);
                     }
                 }
                 clear_active_turn(sessions, &key).await;
@@ -113,13 +169,62 @@ where
             ServerNotification::Error(err)
                 if err.thread_id == thread_id && err.turn_id == turn_id =>
             {
+                let finish_result = finish_started_agent_messages(
+                    output.as_ref(),
+                    &key,
+                    &started_agent_items,
+                    &mut finished_agent_items,
+                )
+                .await;
                 clear_active_turn(sessions, &key).await;
+                finish_result?;
                 return Err(anyhow!("{:?}", err.error));
             }
             _ => {}
         }
     }
 
+    Ok(())
+}
+
+async fn send_agent_message<K>(
+    output: &dyn TurnOutput<K>,
+    key: &K,
+    id: &str,
+    text: &str,
+    started_agent_items: &mut HashSet<String>,
+    finished_agent_items: &mut HashSet<String>,
+) -> anyhow::Result<()>
+where
+    K: Sync + 'static,
+{
+    if started_agent_items.insert(id.to_string()) {
+        output.assistant_message_started(key).await?;
+    }
+
+    let send_result = output.send(key, text).await;
+
+    if finished_agent_items.insert(id.to_string()) {
+        output.assistant_message_finished(key).await?;
+    }
+
+    send_result
+}
+
+async fn finish_started_agent_messages<K>(
+    output: &dyn TurnOutput<K>,
+    key: &K,
+    started_agent_items: &HashSet<String>,
+    finished_agent_items: &mut HashSet<String>,
+) -> anyhow::Result<()>
+where
+    K: Sync + 'static,
+{
+    for id in started_agent_items {
+        if finished_agent_items.insert(id.clone()) {
+            output.assistant_message_finished(key).await?;
+        }
+    }
     Ok(())
 }
 
